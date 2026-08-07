@@ -106,8 +106,8 @@ class ChuongCuaPanel extends HTMLElement {
     try {
       const r = await this._hass.connection.sendMessagePromise({ type: "chuong_cua/get_log" });
       this._events = (r && r.events) || [];
-    } catch (e) {
-      this._events = this._events || [];
+    } catch {
+      // lỗi tạm thời -> giữ dữ liệu cũ, không xóa danh sách
     }
     this._render();
   }
@@ -116,7 +116,7 @@ class ChuongCuaPanel extends HTMLElement {
     if (!confirm("Xóa toàn bộ lịch sử bấm chuông?")) return;
     try {
       await this._hass.connection.sendMessagePromise({ type: "chuong_cua/clear_log" });
-    } catch (e) {}
+    } catch {}
     this._events = [];
     this._render();
   }
