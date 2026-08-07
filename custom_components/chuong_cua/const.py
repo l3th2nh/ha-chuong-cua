@@ -7,3 +7,4 @@ CONF_MESSAGE = "message"
 
 DEFAULT_MESSAGE = "Có người đang bấm chuông"
 MAX_LOG = 300                   # số lần bấm lưu tối đa
+DEBOUNCE_SECONDS = 5            # 2 lần bấm liên tục dưới 5s -> chỉ tính 1 lần

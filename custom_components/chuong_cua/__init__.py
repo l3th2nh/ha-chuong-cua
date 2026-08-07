@@ -19,7 +19,15 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, CONF_SENSOR, CONF_NOTIFY, CONF_MESSAGE, DEFAULT_MESSAGE, MAX_LOG
+from .const import (
+    DOMAIN,
+    CONF_SENSOR,
+    CONF_NOTIFY,
+    CONF_MESSAGE,
+    DEFAULT_MESSAGE,
+    MAX_LOG,
+    DEBOUNCE_SECONDS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,7 +76,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     message = entry.data.get(CONF_MESSAGE) or DEFAULT_MESSAGE
 
     async def _handle_press() -> None:
-        ev = {"time": dt_util.utcnow().isoformat()}
+        # Chống dội: 2 lần bấm liên tục dưới DEBOUNCE_SECONDS -> chỉ tính 1 lần
+        now = dt_util.utcnow()
+        last = data.get("last_press")
+        if last is not None and (now - last).total_seconds() < DEBOUNCE_SECONDS:
+            _LOGGER.debug("Chuông cửa: bỏ qua lần bấm trùng (trong %ss)", DEBOUNCE_SECONDS)
+            return
+        data["last_press"] = now
+
+        ev = {"time": now.isoformat()}
         events = data["log"].setdefault("events", [])
         events.insert(0, ev)
         del events[MAX_LOG:]
