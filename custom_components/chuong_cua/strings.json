@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Chuông cửa",
+        "description": "Chọn cảm biến chuông (binary_sensor từ ESPHome) và kênh thông báo. Khi có người bấm chuông, hệ thống sẽ gửi thông báo và ghi vào nhật ký.",
+        "data": {
+          "sensor": "Cảm biến chuông (binary_sensor)",
+          "notify_service": "Dịch vụ thông báo (vd: notify.mobile_app_iphone)",
+          "message": "Nội dung thông báo"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Đã cấu hình rồi."
+    }
+  }
+}

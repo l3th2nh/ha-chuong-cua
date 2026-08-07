@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Doorbell",
+        "description": "Pick the doorbell binary_sensor (from ESPHome) and the notification service. When someone presses the doorbell, a notification is sent and the press is logged.",
+        "data": {
+          "sensor": "Doorbell sensor (binary_sensor)",
+          "notify_service": "Notify service (e.g. notify.mobile_app_iphone)",
+          "message": "Notification message"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Already configured."
+    }
+  }
+}
