@@ -7,6 +7,7 @@
 - Panel "Chuông cửa": liệt kê các lần bấm; mỗi dòng có nút "Báo ảo" để gán nhãn,
   và phần tổng hợp phân bố số xung (thật vs ảo) -> dùng để hiệu chỉnh ngưỡng lọc.
 """
+import json
 import logging
 import os
 
@@ -34,22 +35,38 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 PANEL_URL = "/chuong_cua/panel.js"
-PANEL_VER = "2"  # tăng mỗi lần sửa panel để chống cache
+PANEL_VER = "3"  # tăng mỗi lần sửa panel để chống cache
 PANEL_URL_V = f"{PANEL_URL}?v={PANEL_VER}"
 PANEL_PATH = "chuong-cua"
 
 
-def _read_pulses(hass: HomeAssistant, signal_sensor: str | None) -> int | None:
-    """Đọc số xung của khung vừa kích hoạt (từ sensor số xung của ESP), nếu có."""
+def _read_signal(hass: HomeAssistant, signal_sensor: str | None):
+    """Đọc đặc trưng tín hiệu của khung vừa kích hoạt từ sensor của ESP.
+
+    Trả về (pulses, sig):
+      - Nếu sensor là JSON đặc trưng (n, us, pmin/pmax, gmin/gmax, raw...) -> sig = dict, pulses = n.
+      - Nếu sensor chỉ là số (sensor số xung cũ) -> pulses = số đó, sig = None.
+      - Không có/không đọc được -> (None, None).
+    """
     if not signal_sensor:
-        return None
+        return None, None
     st = hass.states.get(signal_sensor)
     if st is None or st.state in (None, "", "unknown", "unavailable"):
-        return None
+        return None, None
+    raw = st.state
+    if isinstance(raw, str) and raw.startswith("{"):
+        try:
+            sig = json.loads(raw)
+            if isinstance(sig, dict):
+                n = sig.get("n")
+                pulses = int(n) if isinstance(n, (int, float)) else None
+                return pulses, sig
+        except (ValueError, TypeError):
+            pass
     try:
-        return int(float(st.state))
+        return int(float(raw)), None
     except (ValueError, TypeError):
-        return None
+        return None, None
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -104,15 +121,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data["last_press"] = now
 
         ev = {"time": now.isoformat()}
-        pulses = _read_pulses(hass, signal_sensor)
+        pulses, sig = _read_signal(hass, signal_sensor)
         if pulses is not None:
             ev["pulses"] = pulses
+        if sig is not None:
+            ev["sig"] = sig  # bộ đặc trưng đầy đủ: us, pmin/pmax, gmin/gmax, raw...
 
         events = data["log"].setdefault("events", [])
         events.insert(0, ev)
         del events[MAX_LOG:]
         await store.async_save(data["log"])
-        _LOGGER.info("Chuông cửa: có người bấm lúc %s (xung=%s)", ev["time"], pulses)
+        _LOGGER.info(
+            "Chuông cửa: có người bấm lúc %s (xung=%s, đặc trưng=%s)",
+            ev["time"],
+            pulses,
+            "có" if sig else "không",
+        )
 
         if notify_service:
             svc = notify_service.split(".")[-1]  # 'notify.mobile_app_x' -> 'mobile_app_x'

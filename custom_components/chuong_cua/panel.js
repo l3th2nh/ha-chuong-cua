@@ -1,7 +1,7 @@
 /*
  * Chuông cửa — panel "Nhật ký bấm chuông" (native HA, Shadow DOM).
- * Mỗi lần bấm hiện thời gian + SỐ XUNG. Nút "Báo ảo" để gán nhãn tín hiệu lạ.
- * Bảng phân tích tổng hợp phân bố số xung (thật vs ảo) -> dùng hiệu chỉnh ngưỡng lọc.
+ * Mỗi lần bấm hiện đầy đủ đặc trưng tín hiệu: số xung, thời lượng, độ rộng xung/khe.
+ * Nút "Báo ảo" để gán nhãn; bảng phân tích (thật vs ảo); nút "Xuất dữ liệu" để copy toàn bộ (kèm timing thô).
  * Dữ liệu qua WebSocket: chuong_cua/get_log, chuong_cua/mark, chuong_cua/clear_log.
  */
 const STYLE = `
@@ -30,7 +30,6 @@ h1{font-weight:700;font-size:21px;margin:0;letter-spacing:-.02em}
 .btn:hover{border-color:var(--accent)}
 .btn.danger{color:var(--bad)}
 .btn.danger:hover{border-color:var(--bad)}
-/* Bảng phân tích */
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .stat .lbl{font-size:12px;color:var(--faint);display:flex;align-items:center;gap:6px}
@@ -54,6 +53,8 @@ h1{font-weight:700;font-size:21px;margin:0;letter-spacing:-.02em}
 .meta{min-width:0;flex:1}
 .time{font-weight:600;font-size:14.5px}
 .rel{font-size:12px;color:var(--faint);margin-top:2px;font-family:var(--mono)}
+.sig{font-size:11.5px;color:var(--muted);margin-top:3px;font-family:var(--mono);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pulse{font-family:var(--mono);font-size:12.5px;color:var(--text);background:var(--panel-2);
   border:1px solid var(--line);border-radius:9px;padding:5px 9px;flex:none;white-space:nowrap}
 .pulse.na{color:var(--faint)}
@@ -66,6 +67,16 @@ h1{font-weight:700;font-size:21px;margin:0;letter-spacing:-.02em}
 .empty .bell{font-size:44px;opacity:.5}
 .empty h3{color:var(--muted);font-weight:600;margin:14px 0 6px;font-size:17px}
 .empty p{margin:0;font-size:14px;line-height:1.55}
+/* Overlay xuất dữ liệu */
+.ovl{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;padding:20px;z-index:50}
+.ovl.show{display:grid}
+.card{background:var(--panel-2);border:1px solid var(--line-strong);border-radius:16px;padding:16px;
+  width:100%;max-width:680px;display:flex;flex-direction:column;gap:12px}
+.card h2{margin:0;font-size:17px}
+.card p{margin:0;font-size:13px;color:var(--muted)}
+.card textarea{width:100%;height:280px;background:var(--bg);color:var(--text);border:1px solid var(--line);
+  border-radius:10px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical}
+.card .row{display:flex;gap:10px;justify-content:flex-end}
 @media(max-width:520px){.stats{grid-template-columns:1fr}.mark{padding:6px 8px}}
 </style>`;
 
@@ -100,14 +111,26 @@ class ChuongCuaPanel extends HTMLElement {
     <div class="wrap">
       <div class="top">
         <button class="menu" title="Menu">&#9776;</button>
-        <div><h1>🔔 Chuông cửa</h1><span class="sub">Nhật ký các lần bấm chuông</span></div>
+        <div><h1>🔔 Chuông cửa</h1><span class="sub">Nhật ký + đặc trưng tín hiệu</span></div>
       </div>
       <div class="bar">
         <span class="count" id="count">—</span>
+        <button class="btn" id="export">⬇ Xuất dữ liệu</button>
         <button class="btn" id="refresh">↻ Làm mới</button>
         <button class="btn danger" id="clear">Xóa lịch sử</button>
       </div>
       <div id="view"></div>
+    </div>
+    <div class="ovl" id="ovl">
+      <div class="card">
+        <h2>Xuất dữ liệu nghiên cứu</h2>
+        <p>Copy toàn bộ nội dung dưới đây (gồm timing thô) rồi gửi cho AI để phân tích & chốt ngưỡng lọc.</p>
+        <textarea id="dump" readonly></textarea>
+        <div class="row">
+          <button class="btn" id="copy">📋 Copy</button>
+          <button class="btn" id="close">Đóng</button>
+        </div>
+      </div>
     </div>`;
   }
 
@@ -117,6 +140,9 @@ class ChuongCuaPanel extends HTMLElement {
     );
     this.$("#refresh").addEventListener("click", () => this._load());
     this.$("#clear").addEventListener("click", () => this._clear());
+    this.$("#export").addEventListener("click", () => this._openExport());
+    this.$("#close").addEventListener("click", () => this.$("#ovl").classList.remove("show"));
+    this.$("#copy").addEventListener("click", () => this._copyDump());
     // Ủy quyền click cho các nút "Báo ảo" (danh sách render lại liên tục)
     this.$("#view").addEventListener("click", (e) => {
       const b = e.target.closest("[data-mark]");
@@ -159,6 +185,21 @@ class ChuongCuaPanel extends HTMLElement {
     this._render();
   }
 
+  _openExport() {
+    this.$("#dump").value = JSON.stringify(this._events, null, 1);
+    this.$("#ovl").classList.add("show");
+  }
+  async _copyDump() {
+    const ta = this.$("#dump");
+    try {
+      await navigator.clipboard.writeText(ta.value);
+      this.$("#copy").textContent = "✓ Đã copy";
+      setTimeout(() => (this.$("#copy").textContent = "📋 Copy"), 1500);
+    } catch {
+      ta.focus(); ta.select();  // fallback: bôi đen để copy tay
+    }
+  }
+
   _fmt(iso) {
     const d = new Date(iso);
     const two = (n) => String(n).padStart(2, "0");
@@ -175,8 +216,21 @@ class ChuongCuaPanel extends HTMLElement {
     if (h < 24) return `${h} giờ trước`;
     return `${Math.floor(h / 24)} ngày trước`;
   }
+  _dur(us) {
+    if (typeof us !== "number") return "";
+    return us >= 1000 ? `${(us / 1000).toFixed(1)}ms` : `${us}µs`;
+  }
+  // Dòng đặc trưng hiển thị dưới mỗi mục
+  _sigLine(e) {
+    const s = e.sig;
+    if (!s) return "";
+    const parts = [];
+    if (typeof s.us === "number") parts.push(this._dur(s.us));
+    if (typeof s.gmin === "number") parts.push(`khe ${s.gmin}–${s.gmax}µs`);
+    if (typeof s.pmin === "number") parts.push(`xung ${s.pmin}–${s.pmax}µs`);
+    return parts.join(" · ");
+  }
 
-  // Thống kê số xung cho 1 nhóm sự kiện
   _stats(list) {
     const p = list.map((e) => e.pulses).filter((v) => typeof v === "number");
     if (!p.length) return { n: list.length, withP: 0, min: null, max: null, avg: null };
@@ -186,20 +240,17 @@ class ChuongCuaPanel extends HTMLElement {
       min: Math.min(...p), max: Math.max(...p), avg: Math.round((sum / p.length) * 10) / 10,
     };
   }
-
   _rngText(s) {
     if (!s.withP) return "chưa có số xung";
     return s.min === s.max ? `xung ${s.min} · TB ${s.avg}` : `xung ${s.min}–${s.max} · TB ${s.avg}`;
   }
-
-  // Gợi ý ngưỡng khi đã có cả nhãn thật & ảo
   _suggest(real, fake) {
     if (!real.withP || !fake.withP) return "";
     if (fake.min > real.max)
       return `Gợi ý: báo ảo đều <b>nhiều xung hơn</b> → đặt <code>max_pulses: ${real.max}</code> để loại chúng.`;
     if (fake.max < real.min)
       return `Gợi ý: báo ảo đều <b>ít xung hơn</b> → đặt <code>min_pulses: ${real.min}</code> để loại chúng.`;
-    return `Số xung thật (${real.min}–${real.max}) và ảo (${fake.min}–${fake.max}) <b>chồng lấn</b> → cần thêm mẫu để tách rõ.`;
+    return `Số xung thật (${real.min}–${real.max}) và ảo (${fake.min}–${fake.max}) <b>chồng lấn</b> → xem thêm thời lượng/độ rộng khe (Xuất dữ liệu gửi AI).`;
   }
 
   _render() {
@@ -215,7 +266,7 @@ class ChuongCuaPanel extends HTMLElement {
     if (!n) {
       view.innerHTML = `<div class="empty"><div class="bell">🔔</div>
         <h3>Chưa có ai bấm chuông</h3>
-        <p>Khi có tín hiệu, các lần bấm sẽ hiện ở đây kèm số xung. Bấm "Báo ảo" nếu đó không phải chuông.</p></div>`;
+        <p>Khi có tín hiệu, các lần bấm sẽ hiện ở đây kèm đặc trưng. Bấm "Báo ảo" nếu đó không phải chuông.</p></div>`;
       return;
     }
 
@@ -234,11 +285,13 @@ class ChuongCuaPanel extends HTMLElement {
       const f = this._fmt(e.time);
       const hasP = typeof e.pulses === "number";
       const isFake = !!e.false;
+      const sigLine = this._sigLine(e);
       return `<div class="item${isFake ? " fake" : ""}">
         <div class="ic">${BELL}</div>
         <div class="meta">
           <div class="time">${f.time} · ${f.date}</div>
           <div class="rel">#${n - i} · ${this._rel(e.time)}</div>
+          ${sigLine ? `<div class="sig">${sigLine}</div>` : ""}
         </div>
         <span class="pulse${hasP ? "" : " na"}">${hasP ? `${e.pulses} xung` : "—"}</span>
         <button class="mark" data-mark="${e.time}" data-val="${isFake ? "0" : "1"}">
@@ -254,5 +307,5 @@ class ChuongCuaPanel extends HTMLElement {
 if (!customElements.get("chuong-cua-panel")) {
   customElements.define("chuong-cua-panel", ChuongCuaPanel);
 }
-console.info("%c CHUÔNG CỬA %c panel v2 ", "background:#ffb24c;color:#1a1820;border-radius:4px 0 0 4px;padding:2px 6px",
+console.info("%c CHUÔNG CỬA %c panel v3 ", "background:#ffb24c;color:#1a1820;border-radius:4px 0 0 4px;padding:2px 6px",
   "background:#8a5a1a;color:#fff;border-radius:0 4px 4px 0;padding:2px 6px");
