@@ -3,16 +3,30 @@
     "step": {
       "user": {
         "title": "Doorbell",
-        "description": "Pick the doorbell binary_sensor (from ESPHome) and the notification service. When someone presses the doorbell, a notification is sent and the press is logged.",
+        "description": "Pick the doorbell binary_sensor (from ESPHome) and the notification service. Optionally pick a 'pulse-count sensor' to log with each press, so false alarms can be filtered later.",
         "data": {
           "sensor": "Doorbell sensor (binary_sensor)",
           "notify_service": "Notify service (e.g. notify.mobile_app_iphone)",
-          "message": "Notification message"
+          "message": "Notification message",
+          "signal_sensor": "Pulse-count sensor (optional, e.g. sensor.chuong_cua_so_xung)"
         }
       }
     },
     "abort": {
       "single_instance_allowed": "Already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Doorbell settings",
+        "description": "Change the notification service, message and (optionally) the pulse-count sensor logged with each press.",
+        "data": {
+          "notify_service": "Notify service (e.g. notify.mobile_app_iphone)",
+          "message": "Notification message",
+          "signal_sensor": "Pulse-count sensor (optional, e.g. sensor.chuong_cua_so_xung)"
+        }
+      }
     }
   }
 }

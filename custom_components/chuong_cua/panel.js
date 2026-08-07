@@ -1,14 +1,17 @@
 /*
  * Chuông cửa — panel "Nhật ký bấm chuông" (native HA, Shadow DOM).
- * Liệt kê các lần bấm chuông kèm thời gian. Dữ liệu lấy qua WebSocket (chuong_cua/get_log).
+ * Mỗi lần bấm hiện thời gian + SỐ XUNG. Nút "Báo ảo" để gán nhãn tín hiệu lạ.
+ * Bảng phân tích tổng hợp phân bố số xung (thật vs ảo) -> dùng hiệu chỉnh ngưỡng lọc.
+ * Dữ liệu qua WebSocket: chuong_cua/get_log, chuong_cua/mark, chuong_cua/clear_log.
  */
 const STYLE = `
 <style>
 :host{
   --bg:#14161c;--panel:#1d2029;--panel-2:#242833;--line:rgba(255,255,255,.08);
   --line-strong:rgba(255,255,255,.14);--text:#f2f4f8;--muted:#9aa4b6;--faint:#6b7385;
-  --accent:#ffb24c;--ok:#5fd29a;--radius:16px;--font:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  --mono:ui-monospace,Menlo,monospace;display:block;min-height:100vh;color:var(--text);font-family:var(--font);
+  --accent:#ffb24c;--ok:#5fd29a;--bad:#f0888a;--radius:16px;
+  --font:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;--mono:ui-monospace,Menlo,monospace;
+  display:block;min-height:100vh;color:var(--text);font-family:var(--font);
   background:radial-gradient(1000px 500px at 80% -10%,rgba(255,178,76,.10),transparent 60%),var(--bg);
 }
 *{box-sizing:border-box}
@@ -25,24 +28,45 @@ h1{font-weight:700;font-size:21px;margin:0;letter-spacing:-.02em}
 .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:11px;font-size:13.5px;font-weight:500;
   cursor:pointer;border:1px solid var(--line-strong);background:var(--panel);color:var(--text);font-family:inherit}
 .btn:hover{border-color:var(--accent)}
-.btn.danger{color:#f0888a}
-.btn.danger:hover{border-color:#f0888a}
+.btn.danger{color:var(--bad)}
+.btn.danger:hover{border-color:var(--bad)}
+/* Bảng phân tích */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.stat .lbl{font-size:12px;color:var(--faint);display:flex;align-items:center;gap:6px}
+.stat .big{font-size:26px;font-weight:700;line-height:1.1;margin:3px 0}
+.stat .rng{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.stat.real .big{color:var(--ok)}
+.stat.fake .big{color:var(--bad)}
+.hint{background:color-mix(in srgb,var(--accent) 10%,var(--panel));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line));
+  border-radius:12px;padding:10px 13px;margin:0 0 14px;font-size:13px;color:var(--text);line-height:1.5}
+.hint code{font-family:var(--mono);background:rgba(0,0,0,.25);padding:1px 6px;border-radius:5px;color:var(--accent)}
 .list{display:flex;flex-direction:column;gap:8px}
-.item{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);
-  border-radius:var(--radius);padding:14px 16px}
-.item:first-child{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));
-  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 20%,transparent) inset}
-.ic{width:40px;height:40px;border-radius:11px;flex:none;display:grid;place-items:center;
+.item{display:flex;align-items:center;gap:13px;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:12px 14px}
+.item:first-child{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.item.fake{opacity:.62;border-style:dashed}
+.item.fake .time{text-decoration:line-through}
+.ic{width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;
   background:color-mix(in srgb,var(--accent) 14%,var(--panel-2));color:var(--accent)}
-.ic svg{width:22px;height:22px}
+.item.fake .ic{background:color-mix(in srgb,var(--bad) 14%,var(--panel-2));color:var(--bad)}
+.ic svg{width:21px;height:21px}
 .meta{min-width:0;flex:1}
-.time{font-weight:600;font-size:15px}
-.rel{font-size:12.5px;color:var(--faint);margin-top:2px;font-family:var(--mono)}
-.idx{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.time{font-weight:600;font-size:14.5px}
+.rel{font-size:12px;color:var(--faint);margin-top:2px;font-family:var(--mono)}
+.pulse{font-family:var(--mono);font-size:12.5px;color:var(--text);background:var(--panel-2);
+  border:1px solid var(--line);border-radius:9px;padding:5px 9px;flex:none;white-space:nowrap}
+.pulse.na{color:var(--faint)}
+.mark{flex:none;cursor:pointer;border-radius:9px;padding:6px 10px;font-size:12.5px;font-family:inherit;
+  border:1px solid var(--line-strong);background:transparent;color:var(--muted)}
+.mark:hover{border-color:var(--bad);color:var(--bad)}
+.item.fake .mark{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,var(--line))}
+.item.fake .mark:hover{border-color:var(--ok)}
 .empty{text-align:center;padding:60px 20px;color:var(--faint)}
 .empty .bell{font-size:44px;opacity:.5}
 .empty h3{color:var(--muted);font-weight:600;margin:14px 0 6px;font-size:17px}
 .empty p{margin:0;font-size:14px;line-height:1.55}
+@media(max-width:520px){.stats{grid-template-columns:1fr}.mark{padding:6px 8px}}
 </style>`;
 
 const BELL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>`;
@@ -93,6 +117,11 @@ class ChuongCuaPanel extends HTMLElement {
     );
     this.$("#refresh").addEventListener("click", () => this._load());
     this.$("#clear").addEventListener("click", () => this._clear());
+    // Ủy quyền click cho các nút "Báo ảo" (danh sách render lại liên tục)
+    this.$("#view").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-mark]");
+      if (b) this._mark(b.getAttribute("data-mark"), b.getAttribute("data-val") === "1");
+    });
   }
 
   async _init() {
@@ -110,6 +139,15 @@ class ChuongCuaPanel extends HTMLElement {
       // lỗi tạm thời -> giữ dữ liệu cũ, không xóa danh sách
     }
     this._render();
+  }
+
+  async _mark(time, value) {
+    try {
+      await this._hass.connection.sendMessagePromise({
+        type: "chuong_cua/mark", time, false: value,
+      });
+    } catch {}
+    await this._load();
   }
 
   async _clear() {
@@ -138,33 +176,83 @@ class ChuongCuaPanel extends HTMLElement {
     return `${Math.floor(h / 24)} ngày trước`;
   }
 
+  // Thống kê số xung cho 1 nhóm sự kiện
+  _stats(list) {
+    const p = list.map((e) => e.pulses).filter((v) => typeof v === "number");
+    if (!p.length) return { n: list.length, withP: 0, min: null, max: null, avg: null };
+    const sum = p.reduce((a, b) => a + b, 0);
+    return {
+      n: list.length, withP: p.length,
+      min: Math.min(...p), max: Math.max(...p), avg: Math.round((sum / p.length) * 10) / 10,
+    };
+  }
+
+  _rngText(s) {
+    if (!s.withP) return "chưa có số xung";
+    return s.min === s.max ? `xung ${s.min} · TB ${s.avg}` : `xung ${s.min}–${s.max} · TB ${s.avg}`;
+  }
+
+  // Gợi ý ngưỡng khi đã có cả nhãn thật & ảo
+  _suggest(real, fake) {
+    if (!real.withP || !fake.withP) return "";
+    if (fake.min > real.max)
+      return `Gợi ý: báo ảo đều <b>nhiều xung hơn</b> → đặt <code>max_pulses: ${real.max}</code> để loại chúng.`;
+    if (fake.max < real.min)
+      return `Gợi ý: báo ảo đều <b>ít xung hơn</b> → đặt <code>min_pulses: ${real.min}</code> để loại chúng.`;
+    return `Số xung thật (${real.min}–${real.max}) và ảo (${fake.min}–${fake.max}) <b>chồng lấn</b> → cần thêm mẫu để tách rõ.`;
+  }
+
   _render() {
     const view = this.$("#view");
-    const n = this._events.length;
-    this.$("#count").innerHTML = n ? `Tổng: <b>${n}</b> lần bấm` : "Chưa có lần bấm nào";
+    const ev = this._events;
+    const n = ev.length;
+    const real = ev.filter((e) => !e.false);
+    const fake = ev.filter((e) => e.false);
+    this.$("#count").innerHTML = n
+      ? `Tổng: <b>${n}</b> · thật ${real.length} · ảo ${fake.length}`
+      : "Chưa có lần bấm nào";
+
     if (!n) {
       view.innerHTML = `<div class="empty"><div class="bell">🔔</div>
         <h3>Chưa có ai bấm chuông</h3>
-        <p>Khi có người bấm chuông, các lần bấm sẽ hiện ở đây kèm thời gian.</p></div>`;
+        <p>Khi có tín hiệu, các lần bấm sẽ hiện ở đây kèm số xung. Bấm "Báo ảo" nếu đó không phải chuông.</p></div>`;
       return;
     }
-    const rows = this._events
-      .map((ev, i) => {
-        const f = this._fmt(ev.time);
-        return `<div class="item">
-          <div class="ic">${BELL}</div>
-          <div class="meta"><div class="time">${f.time} · ${f.date}</div>
-            <div class="rel">${this._rel(ev.time)}</div></div>
-          <div class="idx">#${n - i}</div>
-        </div>`;
-      })
-      .join("");
-    view.innerHTML = `<div class="list">${rows}</div>`;
+
+    const rs = this._stats(real), fs = this._stats(fake);
+    const suggest = this._suggest(rs, fs);
+    const stats = `
+      <div class="stats">
+        <div class="stat real"><div class="lbl">✓ Thật</div><div class="big">${rs.n}</div>
+          <div class="rng">${this._rngText(rs)}</div></div>
+        <div class="stat fake"><div class="lbl">🚫 Báo ảo</div><div class="big">${fs.n}</div>
+          <div class="rng">${this._rngText(fs)}</div></div>
+      </div>
+      ${suggest ? `<div class="hint">${suggest}</div>` : ""}`;
+
+    const rows = ev.map((e, i) => {
+      const f = this._fmt(e.time);
+      const hasP = typeof e.pulses === "number";
+      const isFake = !!e.false;
+      return `<div class="item${isFake ? " fake" : ""}">
+        <div class="ic">${BELL}</div>
+        <div class="meta">
+          <div class="time">${f.time} · ${f.date}</div>
+          <div class="rel">#${n - i} · ${this._rel(e.time)}</div>
+        </div>
+        <span class="pulse${hasP ? "" : " na"}">${hasP ? `${e.pulses} xung` : "—"}</span>
+        <button class="mark" data-mark="${e.time}" data-val="${isFake ? "0" : "1"}">
+          ${isFake ? "✓ Thật" : "🚫 Báo ảo"}
+        </button>
+      </div>`;
+    }).join("");
+
+    view.innerHTML = stats + `<div class="list">${rows}</div>`;
   }
 }
 
 if (!customElements.get("chuong-cua-panel")) {
   customElements.define("chuong-cua-panel", ChuongCuaPanel);
 }
-console.info("%c CHUÔNG CỬA %c panel v1 ", "background:#ffb24c;color:#1a1820;border-radius:4px 0 0 4px;padding:2px 6px",
+console.info("%c CHUÔNG CỬA %c panel v2 ", "background:#ffb24c;color:#1a1820;border-radius:4px 0 0 4px;padding:2px 6px",
   "background:#8a5a1a;color:#fff;border-radius:0 4px 4px 0;padding:2px 6px");

@@ -3,16 +3,30 @@
     "step": {
       "user": {
         "title": "Chuông cửa",
-        "description": "Chọn cảm biến chuông (binary_sensor từ ESPHome) và kênh thông báo. Khi có người bấm chuông, hệ thống sẽ gửi thông báo và ghi vào nhật ký.",
+        "description": "Chọn cảm biến chuông (binary_sensor từ ESPHome) và kênh thông báo. Có thể chọn thêm 'sensor số xung' để ghi kèm nhật ký, giúp lọc báo ảo về sau.",
         "data": {
           "sensor": "Cảm biến chuông (binary_sensor)",
           "notify_service": "Dịch vụ thông báo (vd: notify.mobile_app_iphone)",
-          "message": "Nội dung thông báo"
+          "message": "Nội dung thông báo",
+          "signal_sensor": "Sensor số xung (tùy chọn, vd: sensor.chuong_cua_so_xung)"
         }
       }
     },
     "abort": {
       "single_instance_allowed": "Đã cấu hình rồi."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cấu hình Chuông cửa",
+        "description": "Sửa kênh thông báo, nội dung và (tùy chọn) sensor số xung để ghi kèm nhật ký.",
+        "data": {
+          "notify_service": "Dịch vụ thông báo (vd: notify.mobile_app_iphone)",
+          "message": "Nội dung thông báo",
+          "signal_sensor": "Sensor số xung (tùy chọn, vd: sensor.chuong_cua_so_xung)"
+        }
+      }
     }
   }
 }
