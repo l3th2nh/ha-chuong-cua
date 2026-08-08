@@ -35,7 +35,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 PANEL_URL = "/chuong_cua/panel.js"
-PANEL_VER = "3"  # tăng mỗi lần sửa panel để chống cache
+PANEL_VER = "4"  # tăng mỗi lần sửa panel để chống cache
 PANEL_URL_V = f"{PANEL_URL}?v={PANEL_VER}"
 PANEL_PATH = "chuong-cua"
 
@@ -200,18 +200,23 @@ async def ws_get_log(hass: HomeAssistant, connection, msg) -> None:
     {
         vol.Required("type"): "chuong_cua/mark",
         vol.Required("time"): str,
-        vol.Required("false"): bool,
+        vol.Required("label"): vol.In(["bell", "other", ""]),
     }
 )
 @websocket_api.async_response
 async def ws_mark(hass: HomeAssistant, connection, msg) -> None:
-    """Đánh dấu 1 lần bấm là báo ảo (hoặc bỏ đánh dấu), theo mốc thời gian."""
+    """Gán nhãn 1 lần bấm theo mốc thời gian: 'bell' = chuông cửa, 'other' = khác, '' = bỏ nhãn."""
     data = hass.data.get(DOMAIN, {})
     log = data.get("log", {"events": []})
     changed = False
     for ev in log.get("events", []):
         if ev.get("time") == msg["time"]:
-            ev["false"] = msg["false"]
+            label = msg["label"]
+            if label:
+                ev["label"] = label
+            else:
+                ev.pop("label", None)
+            ev.pop("false", None)  # bỏ trường cũ (đã thay bằng 'label')
             changed = True
             break
     if changed:
