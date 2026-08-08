@@ -1,9 +1,8 @@
 /*
  * Chuông cửa — panel "Nhật ký bấm chuông" (native HA, Shadow DOM).
- * Mỗi dòng hiện đặc trưng tín hiệu (số xung, thời lượng, độ rộng xung/khe) + 2 nút gán nhãn:
- *   "🔔 Chuông cửa"  -> dòng thành biểu tượng chuông (nhãn bell)
- *   "Khác"           -> gạch ngang cả dòng (nhãn other)
- * Bảng phân tích so sánh phân bố số xung (chuông vs khác) + nút "Xuất dữ liệu".
+ * Bố cục thẻ dọc (mobile-friendly): hàng thông tin (giờ + đặc trưng + số xung) ở trên,
+ * hàng nút gán nhãn ở dưới -> không chồng lấn trên màn hình hẹp.
+ *   "🔔 Chuông cửa" -> dòng thành nhãn chuông; "Khác" -> gạch ngang cả dòng.
  * WebSocket: chuong_cua/get_log, chuong_cua/mark {time,label}, chuong_cua/clear_log.
  */
 const STYLE = `
@@ -17,17 +16,17 @@ const STYLE = `
   background:radial-gradient(1000px 500px at 80% -10%,rgba(255,178,76,.10),transparent 60%),var(--bg);
 }
 *{box-sizing:border-box}
-.wrap{max-width:820px;margin:0 auto;padding:16px 18px 80px}
-.top{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.wrap{max-width:820px;margin:0 auto;padding:16px 16px 80px}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:16px}
 .menu{width:42px;height:42px;border-radius:12px;flex:none;background:var(--panel);border:1px solid var(--line);
   color:var(--muted);font-size:20px;display:grid;place-items:center;cursor:pointer}
 .menu:hover{border-color:var(--line-strong);color:var(--text)}
-h1{font-weight:700;font-size:21px;margin:0;letter-spacing:-.02em}
-.sub{font-size:12.5px;color:var(--faint)}
-.bar{display:flex;align-items:center;gap:10px;margin:0 0 14px;flex-wrap:wrap}
-.count{font-size:13px;color:var(--muted);margin-right:auto}
-.count b{color:var(--accent);font-size:16px}
-.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:11px;font-size:13.5px;font-weight:500;
+h1{font-weight:700;font-size:20px;margin:0;letter-spacing:-.02em}
+.sub{font-size:12px;color:var(--faint)}
+.bar{display:flex;align-items:center;gap:8px;margin:0 0 14px;flex-wrap:wrap}
+.count{font-size:13px;color:var(--muted);width:100%;margin-bottom:2px}
+.count b{color:var(--accent);font-size:15px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 13px;border-radius:11px;font-size:13px;font-weight:500;
   cursor:pointer;border:1px solid var(--line-strong);background:var(--panel);color:var(--text);font-family:inherit}
 .btn:hover{border-color:var(--accent)}
 .btn.danger{color:var(--bad)}
@@ -36,48 +35,50 @@ h1{font-weight:700;font-size:21px;margin:0;letter-spacing:-.02em}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .stat .lbl{font-size:12px;color:var(--faint);display:flex;align-items:center;gap:6px}
 .stat .big{font-size:26px;font-weight:700;line-height:1.1;margin:3px 0}
-.stat .rng{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.stat .rng{font-size:11.5px;color:var(--muted);font-family:var(--mono)}
 .stat.bell .big{color:var(--ok)}
 .stat.other .big{color:var(--bad)}
 .hint{background:color-mix(in srgb,var(--accent) 10%,var(--panel));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line));
-  border-radius:12px;padding:10px 13px;margin:0 0 14px;font-size:13px;color:var(--text);line-height:1.5}
+  border-radius:12px;padding:10px 13px;margin:0 0 14px;font-size:12.5px;color:var(--text);line-height:1.5}
 .hint code{font-family:var(--mono);background:rgba(0,0,0,.25);padding:1px 6px;border-radius:5px;color:var(--accent)}
-.list{display:flex;flex-direction:column;gap:8px}
-.item{display:flex;align-items:center;gap:13px;background:var(--panel);border:1px solid var(--line);
-  border-radius:var(--radius);padding:12px 14px}
+.list{display:flex;flex-direction:column;gap:10px}
+/* THE bố cục thẻ dọc */
+.item{display:flex;flex-direction:column;gap:11px;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:13px 14px}
 .item:first-child{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
-/* nhãn "khác" -> gạch ngang cả dòng + mờ */
-.item.other{opacity:.55}
-.item.other .time,.item.other .rel,.item.other .sig{text-decoration:line-through}
-/* nhãn "chuông" -> viền xanh nhẹ */
 .item.bell{border-color:color-mix(in srgb,var(--ok) 45%,var(--line));
-  box-shadow:0 0 0 1px color-mix(in srgb,var(--ok) 18%,transparent) inset}
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--ok) 16%,transparent) inset}
+.item.other{opacity:.6}
+.item.other .time,.item.other .rel,.item.other .sig{text-decoration:line-through}
+.head{display:flex;align-items:flex-start;gap:12px}
 .ic{width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;
   background:color-mix(in srgb,var(--accent) 14%,var(--panel-2));color:var(--accent)}
 .item.bell .ic{background:color-mix(in srgb,var(--ok) 16%,var(--panel-2));color:var(--ok)}
 .item.other .ic{background:color-mix(in srgb,var(--bad) 12%,var(--panel-2));color:var(--bad)}
 .ic svg{width:21px;height:21px}
 .meta{min-width:0;flex:1}
-.time{font-weight:600;font-size:14.5px}
-.rel{font-size:12px;color:var(--faint);margin-top:2px;font-family:var(--mono)}
-.sig{font-size:11.5px;color:var(--muted);margin-top:3px;font-family:var(--mono);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pulse{font-family:var(--mono);font-size:12.5px;color:var(--text);background:var(--panel-2);
-  border:1px solid var(--line);border-radius:9px;padding:5px 9px;flex:none;white-space:nowrap}
+.time{font-weight:600;font-size:14.5px;line-height:1.25}
+.rel{font-size:12px;color:var(--faint);margin-top:3px;font-family:var(--mono)}
+.sig{font-size:11.5px;color:var(--muted);margin-top:4px;font-family:var(--mono);line-height:1.4}
+.pulse{font-family:var(--mono);font-size:12px;color:var(--text);background:var(--panel-2);
+  border:1px solid var(--line);border-radius:9px;padding:5px 9px;flex:none;white-space:nowrap;align-self:flex-start}
 .pulse.na{color:var(--faint)}
-/* khu vực nhãn: 2 nút hoặc 1 biểu tượng */
-.acts{display:flex;gap:7px;flex:none}
-.mark{cursor:pointer;border-radius:9px;padding:7px 11px;font-size:12.5px;font-weight:500;font-family:inherit;
-  border:1px solid var(--line-strong);background:transparent;color:var(--muted);white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
-.mark.bell:hover{border-color:var(--ok);color:var(--ok)}
-.mark.other:hover{border-color:var(--bad);color:var(--bad)}
-.tag{flex:none;cursor:pointer;border:none;background:transparent;padding:4px;border-radius:10px;
-  display:grid;place-items:center}
-.tag svg{width:26px;height:26px}
-.tag.bell{color:var(--ok)}
-.tag.other{color:var(--bad);font-size:22px;line-height:1}
-.tag:hover{background:rgba(255,255,255,.06)}
-.empty{text-align:center;padding:60px 20px;color:var(--faint)}
+/* hàng nút: full-width, chia đều */
+.acts{display:flex;gap:9px}
+.mark{flex:1;cursor:pointer;border-radius:10px;padding:10px 8px;font-size:13.5px;font-weight:600;font-family:inherit;
+  border:1px solid var(--line-strong);background:var(--panel-2);color:var(--text);white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.mark.bell:hover{border-color:var(--ok);color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,var(--panel-2))}
+.mark.other:hover{border-color:var(--bad);color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,var(--panel-2))}
+.chip{flex:1;cursor:pointer;border-radius:10px;padding:10px 8px;font-size:13px;font-weight:600;font-family:inherit;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.chip small{font-weight:400;opacity:.7;font-size:11px}
+.chip svg{width:20px;height:20px}
+.chip.bell{color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 45%,var(--line));
+  background:color-mix(in srgb,var(--ok) 10%,var(--panel-2))}
+.chip.other{color:var(--muted);border:1px dashed var(--line-strong);background:transparent}
+.chip:hover{filter:brightness(1.15)}
+.empty{text-align:center;padding:56px 20px;color:var(--faint)}
 .empty .bell{font-size:44px;opacity:.5}
 .empty h3{color:var(--muted);font-weight:600;margin:14px 0 6px;font-size:17px}
 .empty p{margin:0;font-size:14px;line-height:1.55}
@@ -90,7 +91,6 @@ h1{font-weight:700;font-size:21px;margin:0;letter-spacing:-.02em}
 .card textarea{width:100%;height:280px;background:var(--bg);color:var(--text);border:1px solid var(--line);
   border-radius:10px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical}
 .card .row{display:flex;gap:10px;justify-content:flex-end}
-@media(max-width:520px){.stats{grid-template-columns:1fr}.mark{padding:7px 9px}}
 </style>`;
 
 const BELL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>`;
@@ -156,7 +156,6 @@ class ChuongCuaPanel extends HTMLElement {
     this.$("#export").addEventListener("click", () => this._openExport());
     this.$("#close").addEventListener("click", () => this.$("#ovl").classList.remove("show"));
     this.$("#copy").addEventListener("click", () => this._copyDump());
-    // Ủy quyền click cho các nút gán nhãn (danh sách render lại liên tục)
     this.$("#view").addEventListener("click", (e) => {
       const b = e.target.closest("[data-mark]");
       if (b) this._mark(b.getAttribute("data-mark"), b.getAttribute("data-label"));
@@ -167,7 +166,7 @@ class ChuongCuaPanel extends HTMLElement {
     this._ready = true;
     await this._load();
     if (this._timer) clearInterval(this._timer);
-    this._timer = setInterval(() => this._load(), 5000); // tự cập nhật
+    this._timer = setInterval(() => this._load(), 5000);
   }
 
   async _load() {
@@ -175,7 +174,7 @@ class ChuongCuaPanel extends HTMLElement {
       const r = await this._hass.connection.sendMessagePromise({ type: "chuong_cua/get_log" });
       this._events = (r && r.events) || [];
     } catch {
-      // lỗi tạm thời -> giữ dữ liệu cũ, không xóa danh sách
+      // lỗi tạm thời -> giữ dữ liệu cũ
     }
     this._render();
   }
@@ -211,15 +210,15 @@ class ChuongCuaPanel extends HTMLElement {
     }
   }
 
-  // nhãn: "bell" | "other" | null  (tương thích ngược field cũ e.false)
   _label(e) { return e.label || (e.false === true ? "other" : null); }
 
   _fmt(iso) {
     const d = new Date(iso);
     const two = (n) => String(n).padStart(2, "0");
-    const date = `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()}`;
-    const time = `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
-    return { date, time };
+    return {
+      date: `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()}`,
+      time: `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`,
+    };
   }
   _rel(iso) {
     const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -266,6 +265,20 @@ class ChuongCuaPanel extends HTMLElement {
     return `Số xung chuông (${bell.min}–${bell.max}) và khác (${other.min}–${other.max}) <b>chồng lấn</b> → xem thêm độ rộng xung (Xuất dữ liệu gửi AI).`;
   }
 
+  _acts(e) {
+    const lbl = this._label(e);
+    if (lbl === "bell")
+      return `<div class="acts"><button class="chip bell" data-mark="${e.time}" data-label="">
+        ${BELL}<span>Chuông cửa</span><small>· chạm để bỏ</small></button></div>`;
+    if (lbl === "other")
+      return `<div class="acts"><button class="chip other" data-mark="${e.time}" data-label="">
+        🚫 <span>Khác</span><small>· chạm để bỏ</small></button></div>`;
+    return `<div class="acts">
+      <button class="mark bell" data-mark="${e.time}" data-label="bell">${BELL} Chuông cửa</button>
+      <button class="mark other" data-mark="${e.time}" data-label="other">Khác</button>
+    </div>`;
+  }
+
   _render() {
     const view = this.$("#view");
     const ev = this._events;
@@ -298,26 +311,18 @@ class ChuongCuaPanel extends HTMLElement {
       const f = this._fmt(e.time);
       const hasP = typeof e.pulses === "number";
       const lbl = this._label(e);
-      let acts;
-      if (lbl === "bell") {
-        acts = `<button class="tag bell" data-mark="${e.time}" data-label="" title="Bỏ nhãn">${BELL}</button>`;
-      } else if (lbl === "other") {
-        acts = `<button class="tag other" data-mark="${e.time}" data-label="" title="Bỏ nhãn">🚫</button>`;
-      } else {
-        acts = `<div class="acts">
-          <button class="mark bell" data-mark="${e.time}" data-label="bell">🔔 Chuông cửa</button>
-          <button class="mark other" data-mark="${e.time}" data-label="other">Khác</button>
-        </div>`;
-      }
+      const sig = this._sigLine(e);
       return `<div class="item${lbl ? " " + lbl : ""}">
-        <div class="ic">${BELL}</div>
-        <div class="meta">
-          <div class="time">${f.time} · ${f.date}</div>
-          <div class="rel">#${n - i} · ${this._rel(e.time)}</div>
-          ${this._sigLine(e) ? `<div class="sig">${this._sigLine(e)}</div>` : ""}
+        <div class="head">
+          <div class="ic">${BELL}</div>
+          <div class="meta">
+            <div class="time">${f.time} · ${f.date}</div>
+            <div class="rel">#${n - i} · ${this._rel(e.time)}</div>
+            ${sig ? `<div class="sig">${sig}</div>` : ""}
+          </div>
+          <span class="pulse${hasP ? "" : " na"}">${hasP ? `${e.pulses} xung` : "—"}</span>
         </div>
-        <span class="pulse${hasP ? "" : " na"}">${hasP ? `${e.pulses} xung` : "—"}</span>
-        ${acts}
+        ${this._acts(e)}
       </div>`;
     }).join("");
 
@@ -328,5 +333,5 @@ class ChuongCuaPanel extends HTMLElement {
 if (!customElements.get("chuong-cua-panel")) {
   customElements.define("chuong-cua-panel", ChuongCuaPanel);
 }
-console.info("%c CHUÔNG CỬA %c panel v4 ", "background:#ffb24c;color:#1a1820;border-radius:4px 0 0 4px;padding:2px 6px",
+console.info("%c CHUÔNG CỬA %c panel v5 ", "background:#ffb24c;color:#1a1820;border-radius:4px 0 0 4px;padding:2px 6px",
   "background:#8a5a1a;color:#fff;border-radius:0 4px 4px 0;padding:2px 6px");

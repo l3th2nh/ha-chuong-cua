@@ -35,7 +35,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 PANEL_URL = "/chuong_cua/panel.js"
-PANEL_VER = "4"  # tăng mỗi lần sửa panel để chống cache
+PANEL_VER = "5"  # tăng mỗi lần sửa panel để chống cache
 PANEL_URL_V = f"{PANEL_URL}?v={PANEL_VER}"
 PANEL_PATH = "chuong-cua"
 
