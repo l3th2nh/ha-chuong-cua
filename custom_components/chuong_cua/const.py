@@ -8,4 +8,4 @@ CONF_SIGNAL_SENSOR = "signal_sensor"   # (tùy chọn) sensor số xung -> ghi k
 
 DEFAULT_MESSAGE = "Có người đang bấm chuông"
 MAX_LOG = 300                   # số lần bấm lưu tối đa
-DEBOUNCE_SECONDS = 5            # 2 lần bấm liên tục dưới 5s -> chỉ tính 1 lần
+DEBOUNCE_SECONDS = 3            # 2 lần bấm liên tục dưới 3s -> chỉ tính 1 lần
