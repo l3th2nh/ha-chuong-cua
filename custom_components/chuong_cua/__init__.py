@@ -35,7 +35,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 PANEL_URL = "/chuong_cua/panel.js"
-PANEL_VER = "5"  # tăng mỗi lần sửa panel để chống cache
+PANEL_VER = "6"  # tăng mỗi lần sửa panel để chống cache
 PANEL_URL_V = f"{PANEL_URL}?v={PANEL_VER}"
 PANEL_PATH = "chuong-cua"
 
@@ -102,7 +102,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data["ws_registered"] = True
         websocket_api.async_register_command(hass, ws_get_log)
         websocket_api.async_register_command(hass, ws_clear_log)
-        websocket_api.async_register_command(hass, ws_mark)
 
     # Cấu hình hiệu lực = data (lúc cài) chồng bởi options (sửa sau qua Configure)
     conf = {**entry.data, **entry.options}
@@ -194,36 +193,6 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 async def ws_get_log(hass: HomeAssistant, connection, msg) -> None:
     data = hass.data.get(DOMAIN, {})
     connection.send_result(msg["id"], data.get("log", {"events": []}))
-
-
-@websocket_api.websocket_command(
-    {
-        vol.Required("type"): "chuong_cua/mark",
-        vol.Required("time"): str,
-        vol.Required("label"): vol.In(["bell", "other", ""]),
-    }
-)
-@websocket_api.async_response
-async def ws_mark(hass: HomeAssistant, connection, msg) -> None:
-    """Gán nhãn 1 lần bấm theo mốc thời gian: 'bell' = chuông cửa, 'other' = khác, '' = bỏ nhãn."""
-    data = hass.data.get(DOMAIN, {})
-    log = data.get("log", {"events": []})
-    changed = False
-    for ev in log.get("events", []):
-        if ev.get("time") == msg["time"]:
-            label = msg["label"]
-            if label:
-                ev["label"] = label
-            else:
-                ev.pop("label", None)
-            ev.pop("false", None)  # bỏ trường cũ (đã thay bằng 'label')
-            changed = True
-            break
-    if changed:
-        store: Store = data.get("store")
-        if store:
-            await store.async_save(log)
-    connection.send_result(msg["id"], {"ok": changed})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "chuong_cua/clear_log"})
